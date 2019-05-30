@@ -2,52 +2,60 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
- svg       { border:3px solid rgba(1,255,255,0.3); }
+ svg       { border:3px solid rgba(1,255,255,0.1); }
  .cell     { transition: d 0.1s; }
  .xsn      { transition: opacity 0.8s; }
 </style>
-<script type='text/javascript' src='https://code.jquery.com/jquery-1.12.1.js'></script>
-<body>
+<script
+  src="http://code.jquery.com/jquery-2.2.4.js"
+  integrity="sha256-iT6Q9iMJYuQiMWNd9lDyBUStIq/8PuOW33aOqmvFpqI="
+  crossorigin="anonymous"></script><body>
 <pre></pre>
 <div>
 <!--
 <pre>
+webdesign.tutsplus.com/tutorials/svg-viewport-and-viewbox-for-beginners--cms-30844
+
 TBD: 
  0) cell shape change needs to be before transfer neighbor's state
- 1) red arcs are confusing
  ---
  2) scenario and story line
  3) coding: remove state0 by elim mutation, help!
  4) rt side fuses colors after a while - kludge
- 
- https://www.manta.com/c/mm71q62/s-l-excavating-inc
- https://singingriverfarms.com/about
- https://the-journal.com/articles/3202
-   jackson lake
-   
-   https://americangallery.wordpress.com/2014/01/29/andrew-loomis-1892-1959-2/
-   
-   https://www.youtube.com/watch?v=9B7w_fh4fg8 graphviz
 </pre>
 -->
 </div>
-<h4>Earth Computing - May 17,2019 GTF demo</h4>
-<svg width="550" height="800" viewBox="0 0 500 800" xmlns="http://www.w3.org/2000/svg">
+<h4>Earth Computing - github.com/johngslater/GTFdemo/tree/master</h4>
+<svg width="650" height="800" viewBox="0 0 650 800" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <marker id="link" viewBox="0 -5 10 10" refX="10" refY="-0.6" 
            markerWidth="3" markerHeight="3" orient="auto" fill='gray'>
       <path d="M0,-5L10,0L0,5"></path>
     </marker>
   </defs>
-  <g id='fsmPickerArea' transform='translate(0 230)'></g>
-  <g id='fsmArea' transform='translate(0 280)'></g>
+  <g transform='translate(50   0)'>
+    <rect fill='green' opacity=0.1 stroke='red' x=-10 y=30 width=545 height=770 />
+    <text x=141 y=71 fill='black' font-size='35' >reversible zone</text>
+    <text x=140 y=70 fill='white'  font-size='35' >reversible zone</text>
+    <g id='cntrls'        transform='translate(10   0)'></g>
+		<g id='objs'          transform='translate(10  40)'></g>
+		<g id='fsmPickerArea' transform='translate(10 260)'></g>
+		<g id='fsmArea'       transform='translate(10 310)'></g>
+	</g>
 </svg>
 <script>
 "use strict";
+
+const map=(obj,fn)=> Object.keys(obj).map((d)=> fn(obj[d],d));
+const $byID   =(id  )=> $(document.getElementById(id));
+const $byClass=(name)=> $(document.getElementsByClassName(name));
+const $byTag  =(tag )=> $(document.getElementsByTagName(tag));
+
 const log=console.log;
 const range=(n)=> [...Array(n).keys()];
 const svgNS="http://www.w3.org/2000/svg", DIV='<div>';
 const SVGnode= (tag)=> document.createElementNS(svgNS,tag);
+const $SVGnode= (tag)=> $(SVGnode(tag));
 const append=($p,$c)=>{ $p.append($c); return $c; };
 
 // Users/johngslater/Public/cellAgentDemo/gridAndWIres.html   centered labeling
@@ -88,6 +96,127 @@ function arc(pt1,pt2,archingDir,r,__,path=$(SVGnode('path'))){ //uses arrow head
 
   path.attr({ stroke:'gray', 'stroke-width':2, fill:'none' })
   return path;
+};
+
+const Path= (parent,x1,x2,x3,x4,stroke='black',width=2,__,self,aLine,obj,d,p,c=',')=>{
+  // x1 and x4 are the ends of the path
+  // x2-x1 and x3-x4 are the normal vectors
+  obj={ 
+    x1:x1[0],y1:x1[1], 
+    x2:x2[0],y2:x2[1], 
+    x3:x3[0],y3:x3[1], 
+    x4:x4[0],y4:x4[1] 
+  };
+  d=()=> 'M'+obj.x1+c+obj.y1+
+        ' C'+obj.x2+c+obj.y2+
+         ' '+obj.x3+c+obj.y3+
+         ' '+obj.x4+c+obj.y4 ;
+  p=$SVGnode('path');
+  parent.append(p.attr({ d:d(), stroke:stroke, "stroke-width":width, fill:'none'}));
+  self={ 
+    node:p, 
+    update:(neu)=>{ // keys: x1 y1 x2 y2 x3 y3 x4 y4
+      obj=Object.assign(obj,neu); 
+      self.node.attr({ d:d() }); 
+    },
+    obj:obj,
+  };
+  return self;
+};
+
+let dif2pt=(p2,p1)=> [ p2[0]-p1[0], p2[1]-p1[1] ];  // p2 is destination
+let len2pt=(p1,p2,__,dp=dif2pt(p2,p1))=> Math.sqrt(dp[0]*dp[0]+dp[1]*dp[1]);
+let add2pt=(p1,p2)=> [ p1[0]+p2[0], p1[1]+p2[1] ];
+let ang2pt=(p1,p2)=> Math.atan2(p2[1]-p1[1],p2[0]-p1[0])*180/Math.PI; // angle=atan2(y2-y1,x2-x1)*180/PI
+//log(ang2pt([0,0],[1,0])==0,ang2pt([0,0],[-1,0])==180,ang2pt([0,0],[0,-1])==(-90));  // test ang2pt
+
+let rot=(pt1,pivotPt2,dAng,__,l2pt=len2pt(pt1,pivotPt2),rad=(Math.PI/180)*(ang2pt(pt1,pivotPt2)+dAng))=>{
+  return [ pivotPt2[0]+l2pt*Math.cos(rad), pivotPt2[1]+l2pt*Math.sin(rad) ];
+};
+log(rot([1,0],[0,0],90)); // should be [0,1]
+
+
+const ArcedPath=(parent,x1,x4,arcing=0.7,stroke='black',width=2,__,
+  dp=dif2pt(x4,x1),
+  cntl=[arcing*dp[1],-arcing*dp[0]],  // we flip 90deg  YYY
+  x2=add2pt(x1,cntl),
+  x3=add2pt(x4,cntl)
+)=>{
+  log(cntl,
+    x1.map((d)=> Math.round(d)).join(','),
+    x2.map((d)=> Math.round(d)).join(','),
+    x3.map((d)=> Math.round(d)).join(','),
+    x4.map((d)=> Math.round(d)).join(',') );
+  return Path(parent,x1,x2,x3,x4,stroke,width);
+};
+const ArcedPathAng=(parent,x1,x4,arcing=0.7,ang=90,stroke='black',width=2,__,dang=90+ang,
+  dp=dif2pt(x4,x1),
+  cntl=[arcing*dp[1],-arcing*dp[0]],  // we dont flip 90deg YYY
+  x2=rot(add2pt(x1,cntl),x1,-dang),
+  x3=rot(add2pt(x4,cntl),x4,dang)
+)=>{
+  log(cntl,
+    x1.map((d)=> Math.round(d)).join(','),
+    x2.map((d)=> Math.round(d)).join(','),
+    x3.map((d)=> Math.round(d)).join(','),
+    x4.map((d)=> Math.round(d)).join(','),
+    dang);
+  return Path(parent,x1,x2,x3,x4,stroke,width)
+};
+
+const Arrow=(path,size=4,aspectRatio=3,__,length=size*aspectRatio)=>{
+  let arrow=append($(path.node[0].parentElement),$(SVGnode('path'  )))
+    .attr({ fill:"black" });
+  let x0 =path.node[0].getPointAtLength(path.node[0].getTotalLength());   // path.node[0].getTotalLength()
+  let x0x=[x0.x,x0.y];  // tip of arrow
+  let x00=path.node[0].getPointAtLength(path.node[0].getTotalLength()-length);
+  let x00x=[x00.x,x00.y];
+  let dx=dif2pt(x00x,x0x).map((d)=> d/aspectRatio);  // should be close to length
+  let x1=add2pt(x00x,[-dx[1], dx[0]]);
+  let x2=add2pt(x00x,[ dx[1],-dx[0]]);
+  arrow.attr( { d:'M'+[x0x,x1,x2].map((vert)=> vert.join(' ')).join(' L')+' Z', fill:$(path.node[0]).attr('stroke'), });
+  path.arrow=arrow;
+	return path;
+};
+const test_Arrow=()=>{
+	let fool1=ArcedPath($('svg:first'),[400,400],[400,490],0.7);  // FFFF
+	ArcedPathAng($('svg:first'),[400,400],[400,490],0.7,90,'red');  // should be the same, but it is not
+	ArcedPathAng($('svg:first'),[400,400],[400,490],0.3,45,'green');
+	let fool2=Arrow(ArcedPathAng($('svg:first'),[400,400],[400,490],0.7,135,'lime'));
+	ArcedPathAng($('svg:first'),[400,400],[400,490],0.5,135,'blue');
+};
+const test_ArcedPath=()=>{
+	let pts10=range(10).map((d,k)=> [k*50,300] );
+	let pts10pair=pts10.map((d,k,__,ht=50)=> [d,[d[0],d[1]+ht]] );
+	let dx=(pt,dx)=> [pt[0]+dx,pt[1]];
+	let dy=(pt,dy)=> [pt[0],pt[1]+dy];
+	let os
+	os==0;  // vary curvature on 1 side
+	let paths10_1=pts10pair.map((d,k)=> Path($('svg:first'),   d[0]    ,   dx(d[0],k*5)    ,   dx(d[1],10 ),       d[1]    ,'green',3) );
+	os= 75; // vary curvature on both sides
+	let paths10_2=pts10pair.map((d,k)=> Path($('svg:first'),dy(d[0],os),dy(dx(d[0],k*5),os),dy(dx(d[1],k*5),os),dy(d[1],os),'green',3) );
+	pts10pair=pts10pair.map((d,k)=> [d[0],dy(d[0],k*10)] ); // increase the separation
+	os=150; // make longer
+	let paths10_3=pts10pair.map((d,k)=> 
+		Path($('svg:first'),dy(d[0],os),dy(dx(d[0],k*5),os),dy(dx(d[1],k*5),os),dy(d[1],os),'green',3) );
+	os=250; // make longer by changing the offset from pt1 - is 'scale' the offset
+	let paths10_4=pts10pair.map((d,k,__,pt2=add2pt(d[0],[0,k*5]))=> 
+		Path($('svg:first'),dy(d[0],os),dy(dx(d[0],k*5),os),dy(dx(pt2,k*5),os),dy(pt2,os),'green',3) );
+	
+	os=325; //  rotate  is fkd up zzz
+	let paths10_5=pts10pair.map((d,k,__,pt2p=add2pt(d[0],[0,k*5+0.01]),pt2=rot(d[0],pt2p,45))=> 
+		Path($('svg:first'),dy(d[0],os),dy(dx(d[0],k*5),os),dy(dx(pt2,k*5),os),dy(pt2,os),'green',3) );
+	os=400; //  rotate
+	let paths10_6=pts10pair.map((d,k,__,pt2=rot(d[0],add2pt(d[0],[0,k*5]),45))=> 
+		ArcedPath($('svg:first'),dy(d[0],os),dy(pt2,os),k/10,'green',3) );
+	os=400 ; //  rotate
+	let paths10_7=pts10pair.map((d,k,__,pt2=rot(d[0],add2pt(d[0],[0,50]),45))=> 
+		ArcedPath($('svg:first'),dy(d[0],os),dy(pt2,os),k/10,'green',3) );
+
+	//let foo=Path($('svg:first'),[400,400],[400,490],[300,300],[390,300],'green',3);
+	//foo.update({x3:300});
+	//log(foo.node[0].getTotalLength());
+	//log( foo.node[0].getPointAtLength(foo.node[0].getTotalLength()/2));
 };
 </script> <!--lib-->
 <script>
@@ -203,45 +332,58 @@ const SendPortFSM=(model,__,self)=>{
 const RecvPortFSM=(model,__,self)=>{
   let $g=$('#fsmArea');
   let vert=1;  // 0 horz or  1 vert
-  let x0     = (vert==0) ? [150,40] : [ 410,80];
-  let dx     = (vert==0) ? 
-    [ [25,-35],[85,-35],[ 60,40]] : 
-    [ [-45, 30],[-45, 80],[70,60]]
-  ;
-
-  let spacing= (vert==0) ? [ 60, 0] : [   0,60];
-  let ang    = (vert==0) ? 0 : -90;
+  let x0     = (vert==0) ? [150,40] : [410,80];
+  let spacing= (vert==0) ? [ 60, 0] : [  0,60];
+  let x      = range(4).map((d,k)=> [ x0[0]+k*spacing[0], x0[1]+k*spacing[1] ] );
+  let dots=range(4).map((d,k)=> Dot($g,x[k],k+'_recv',["a","b","c","d","e"][k],k==0 ? 1 : undefined) );  
   
-  let recvNodes=range(3).map((d,k)=> 
-    Dot($g,[x0[0]+k*spacing[0],x0[1]+k*spacing[1]],k+'_recv',["a","b","c","d"][k],k==0 ? 1 : undefined) 
-  );
+  let ang    = (vert==0) ? 0 : -90;
   let angs=(vert==0) ? 
     [
       [  45,135,'1'],
+      [-135,-45,'0'],     
       [  45,135,'1'],
       [-135,-45,'1'],
     ] :
     [
       [ -135,135,'0'],
+      [   -45,45,'1'],
       [ -135,135,'0'],
       [   45,-45,'0'],
     ]
   ;   
   let links_data=[
-    ["0-recv","1-recv",angs[2],160,angs[0][0],angs[0][1],[x0[0]+0*spacing[0],x0[1]+0*spacing[1]] ],
-    ["1-recv","2-recv",angs[2],160,angs[1][0],angs[1][1],[x0[0]+1*spacing[0],x0[1]+1*spacing[1]] ],
-    ["2-recv","0-recv",angs[2],160,angs[2][0],angs[2][1],[x0[0]+2*spacing[0],x0[1]+2*spacing[1]] ],
+    ["0-recv","1-recv",angs[2], 30,angs[0][0],angs[0][1],x[0] ],
+    ["1-recv","2-recv",angs[2], 30,angs[1][0],angs[1][1],x[1] ],
+    ["2-recv","3-recv",angs[2], 30,angs[2][0],angs[2][1],x[2] ],
+    ["3-recv","0-recv",angs[2],150,angs[3][0],angs[3][1],x[3] ],
   ];
   let links= links_data.map((d,k)=>
     append($g,arc(
-      offset(links_data[k                                   ][6],d[4]), 
+      offset(links_data[                                 k  ][6],d[4]), 
       offset(links_data[(k==(links_data.length-1)) ? 0 : k+1][6],d[5]),
-      angs[k][2]
+      angs[k][2],
+      d[3]
     ).attr({id:[d[0],d[1]].join('_')}) )  
   );
-  Text($g,"L==3"       ,x0[0]+dx[0][0],x0[1]+dx[0][1]).attr({ "text-anchor":"middle",dy:".3em" });
-  Text($g,"L==5"       ,x0[0]+dx[1][0],x0[1]+dx[1][1]).attr({ "text-anchor":"middle",dy:".3em" });
-  Text($g,"recv.accept",x0[0]+dx[2][0],x0[1]+dx[2][1]).attr({ "text-anchor":"middle",dy:".3em" });
+  let dx     = (vert==0) ? 
+    [ 
+      [ (x[0][0]+x[1][0])/2,-35],  // L==3
+      [ (x[1][0]+x[2][0])/2, 40],  // transfer
+      [ (x[2][0]+x[3][0])/2,-35],  // L==5
+      [ (x[3][0]+x[0][0])/2, 60]   // recv.accept
+    ] : 
+    [ 
+      [-45, (x[0][1]+x[1][1])/2],  // L==3
+      [-15, (x[1][1]+x[2][1])/2],  // transfer
+      [-45, (x[2][1]+x[3][1])/2],  // L==5
+      [ 75, (x[3][1]+x[0][1])/2]   // recv.accept
+    ]
+  ;  
+  Text($g,"L==3"       ,x0[0]+dx[0][0],dx[0][1]).attr({ "text-anchor":"middle",dy:".3em" });
+  Text($g,"transfer"   ,x0[0]+dx[1][0],dx[1][1]).attr({ "text-anchor":"middle",dy:".3em" });
+  Text($g,"L==5"       ,x0[0]+dx[2][0],dx[2][1]).attr({ "text-anchor":"middle",dy:".3em" });
+  Text($g,"recv.accept",x0[0]+dx[3][0],dx[3][1]).attr({ "text-anchor":"middle",dy:".3em" });
 
   self={
     model:model,
@@ -407,7 +549,7 @@ const CellFSM=(model,positionHint,__,self)=>{  // model has .state, .prime, .las
     Text($g,"L==1" ,tx[0][0],tx[0][1]).attr({  "font-size":"16","text-anchor":"middle",dy:".3em" });
     Text($g,"recv" ,tx[1][0],tx[1][1]).attr({  "font-size":"16","text-anchor":"middle",dy:".3em" });
     Text($g,"L==3" ,tx[2][0],tx[2][1]).attr({  "font-size":"16","text-anchor":"middle",dy:".3em" });
-    Text($g,"recv==b",tx[3][0],tx[3][1]).attr({  "font-size":"16","text-anchor":"middle",dy:".3em" });
+    Text($g,"recv==c",tx[3][0],tx[3][1]).attr({  "font-size":"16","text-anchor":"middle",dy:".3em" });
     Text($g,"L==5" ,tx[4][0],tx[4][1]).attr({  "font-size":"16","text-anchor":"middle",dy:".3em" });
     Text($g,"recv==a",tx[5][0],tx[5][1]).attr({  "font-size":"16","text-anchor":"middle",dy:".3em" });
   }
@@ -432,11 +574,13 @@ const CellFSM=(model,positionHint,__,self)=>{  // model has .state, .prime, .las
 const ptsX= [[0,-1],[1,-1],[1  ,0],[1,1],[0,1],[-1,1],[-1  ,0],[-1,-1]];
 const ptsL= [[0,-1],[1,-1],[1  ,0],[1,1],[0,1],[-1,1],[-1.5,0],[-1,-1]];
 const ptsR= [[0,-1],[1,-1],[1.5,0],[1,1],[0,1],[-1,1],[-1  ,0],[-1,-1]];
-const setVerts=($obj,xy,verts)=>{ $obj[0].setAttribute('d','M'+verts.map((vert)=>
-      vert.map((vi,k)=> 
-        (xy[k]+(scale*vi))
-      ).join(' ')
-    ).join('L')+' Z'); };
+const setVerts=($obj,xy,verts)=>{ 
+  $obj[0].setAttribute('d','M'+verts.map((vert)=>
+		vert.map((vi,k)=> 
+			(xy[k]+(scale*vi))
+		).join(' ')
+	).join('L')+' Z');
+};
 
 let dataCntr=0;
 let packet=0;
@@ -474,7 +618,7 @@ const renderASendPortState=($p,xy,n,__,state=n)=>{
   data2  .attr({ fill: state<3 ? clr[0] : clr[2], opacity: state<1 ? 0 : 1 });
 };
 
-const SendPort=(xy,__,self,$p=$('svg'))=>{
+const SendPort=($p,xy,__,self)=>{
   let r=scale-5;
   let circle1=append($p,$(SVGnode('circle'))
     .attr({cx:xy[0],cy:xy[1],r:r+3,fill:'white',stroke:'orange','stroke-width':1 }));
@@ -506,7 +650,6 @@ const SendPort=(xy,__,self,$p=$('svg'))=>{
   data2  .on('click',()=>{ if(self.state==0){ sendPacket(); } });
   
   let render=(state,__,clr=packetColor[self.data%3])=>{
-    log(self.data);
     data1  .attr({ fill: state<2 ? clr[0] : clr[1], opacity: state<1 || state>2 ? 0 : 1 });
     data2  .attr({ fill: state<3 ? clr[0] : clr[2], opacity: state<1 ? 0 : 1 });
     stateLabel.html(["a","b","c","d","e"][self.state]);
@@ -519,7 +662,9 @@ const SendPort=(xy,__,self,$p=$('svg'))=>{
     setState:(n,data)=>{ 
       self.lastTransition=[self.state,n].join('_');
       self.state=n;
+      $('#sendTransferButton').css({opacity: n==3  ? 1.0 : 0.2});
       if(n==1){ self.data=data; }; 
+      $('.sendToken').css({ opacity: n==0 ? 1.0 : 0.2 }); // 0 is 'a'
       render(n);
       if(self.fsmView){ self.fsmView.update(self.state,self.lastTransition); } // zzz
     },
@@ -533,7 +678,7 @@ const SendPort=(xy,__,self,$p=$('svg'))=>{
   self.setState(0);
   return self;
 }; // SendPort
-const RecvPort=(xy,__,self,$p=$('svg'))=>{
+const RecvPort=($p,xy,__,self)=>{
   let r=scale-5;
   let circle1=append($p,$(SVGnode('circle'))
     .attr({cx:xy[0],cy:xy[1],r:r+3,fill:'white',stroke:'violet','stroke-width':1 }));
@@ -565,8 +710,8 @@ const RecvPort=(xy,__,self,$p=$('svg'))=>{
   
   let render=(state,__,clr=packetColor[self.data%3])=>{
     data1  .attr({ opacity: state<1 ? 0 : 1, fill:clr[1], });
-    data2  .attr({ opacity: state<2 ? 0 : 1, fill:clr[2], });
-    stateLabel.html(["a","b","c","d"][self.state]);
+    data2  .attr({ opacity: state<3 ? 0 : 1, fill:clr[2], });
+    stateLabel.html(["a","b","c","d","e"][self.state]);
   };
   self={
     state:0,  // 0: READY_FOR_DATA, 1:DATA1_RECVED, 2:DATA2_RECVED
@@ -575,10 +720,19 @@ const RecvPort=(xy,__,self,$p=$('svg'))=>{
     setState:(n)=>{
       self.lastTransition=[self.state,n].join('_');
       self.state=n; 
+      $('.acceptToken').css({ opacity: n==3 ? 1.0 : 0.2 });  // 2 is 'd'
       render(n);
+      $('#recvTransferButton').css({opacity: n==1  ? 1.0 : 0.2});
       if(self.fsmView){ self.fsmView.update(self.state,self.lastTransition); }  // zzz
     },
-    requestRecv:()=>{ if(self.state==2){ self.setState(0); } },
+    requestTransfer:()=>{ if(self.state==1){ self.setState(2); } },
+    requestRecv    :()=>{ 
+    log(self.state)
+    if(self.state==3){ self.setState(0); } },  // AAA is am using command
+    command:(what)=>{ 
+      if(what=='requestSend' && self.state==0){ sendPacket();     }
+      if(what=='ACK'         && self.state==1){ self.setState(2); }  // AAA
+    },
     viewConstructor:RecvPortFSM,
     fuseColors:(__,clr=packetColor[self.data%3])=>{
       data1  .attr({ fill:clr[0], });
@@ -676,13 +830,16 @@ const renderACellState=($p,xy,n)=>{  // repeat of code from Cell
 
 
 let uuid=0;
-const Cell=(xy,prime0,name,__,self,$p=$('svg'))=>{
+const Cell=($p,xy,prime0,name,__,self)=>{
  //VIEW
   let r=scale-5;
+  let outline=append($p,$(SVGnode('path'  ))
+    .attr({'class':'cell', fill:'white',opacity:0.5, stroke:'black'}));  
+  
   let arc1=append($p,$(SVGnode('path')));
   let arc2=append($p,$(SVGnode('path')));
   let circle1=append($p,$(SVGnode('circle'))
-    .attr({cx:xy[0],cy:xy[1],r:r+3,fill:'transparent',stroke:'orange','stroke-width':1 }));
+    .attr({cx:xy[0],cy:xy[1],r:r+3,fill:'white',stroke:'orange','stroke-width':1 }));
   let circle2=append($p,$(SVGnode('circle'))
     .attr({cx:xy[0],cy:xy[1],r:r  ,fill:'transparent',stroke:'violet','stroke-width':2 }));
   let data1=append($p,$(SVGnode('path'  ))
@@ -705,9 +862,11 @@ const Cell=(xy,prime0,name,__,self,$p=$('svg'))=>{
   );
   let label=Text($p,name,xy[0],xy[1]+2*scale);
   let stateLabel=Text($p,'0',xy[0],xy[1]+3*scale);
-  let outline=append($p,$(SVGnode('path'  ))
-    .attr({'class':'cell', fill:'transparent',stroke:'black'}));
+
   let render=(state,prime,__,n=state,clr=packetColor[self.data%3])=>{
+    //setVerts(outline,xy,pts);
+    setVerts(outline,xy,ptsX);  // lets not do the oscillation
+    
     circle1.attr({ opacity: n>0 ? 1 : 0 });
     circle2.attr({ opacity: n>1 ? 1 : 0 }); 
     data1  .attr({ opacity: n>2 && n<5 ? 1 : 0, fill:clr[1] });
@@ -729,8 +888,7 @@ const Cell=(xy,prime0,name,__,self,$p=$('svg'))=>{
     let pts={ "0":ptsL, "1":ptsR }[self.prime];
     if(self.state0%2==0 && prime==1){ pts=ptsX; }  // zzz not correct yet
     if(self.state0%2==1 && prime==0){ pts=ptsX; }  // zzz not correct yet
-  //setVerts(outline,xy,pts);
-    setVerts(outline,xy,ptsX);  // lets not do the oscillation
+
     
     stateLabel.html(self.state+(prime?"'":" "));
   };
@@ -778,7 +936,8 @@ const Cell=(xy,prime0,name,__,self,$p=$('svg'))=>{
   };     
   fsm['3']=(prime0)=>{ // data1   
     if(prime0==0){
-      if(ckRbc(0)){ setState(4); self.Rbc.data=self.data; self.Rbc.setState(1);  return; }
+      if(ckRbc(0)){ self.Rbc.data=self.data; self.Rbc.setState(1);  return; }
+      if(ckRbc(2)){ setState(4); return; }
       if(ckR(4,1)){ setState(4); return; } // -> ack
     }
     setState(3);
@@ -797,7 +956,7 @@ const Cell=(xy,prime0,name,__,self,$p=$('svg'))=>{
   fsm['5']=(prime0)=>{ // data2
     if(prime0==0){
     //if(ckRbc(1)){ setState(2); self.Rbc.setState(2); setTimeout(()=> self.Rbc.fuseColors(),300); return; }  
-      if(ckRbc(1)){ self.Rbc.setState(2); setTimeout(()=> self.Rbc.fuseColors(),300); return; }
+      if(ckRbc(2)){ self.Rbc.setState(3); setTimeout(()=> self.Rbc.fuseColors(),300); return; }
       if(ckRbc(0)){ setState(2);  return; }      
       if(ckR(2,1)){ setState(2); return; }
     }
@@ -832,35 +991,71 @@ let aCycle=()=>{
   });
   objs.map((o)=>{ o.update(); });  // runs fsm; fsm calls setState
 };
-let $p=$('svg');
 
-Text($p,'Fast',200,20).css({ stroke:'black',fill:'lime'  })
-  .on('click',()=>{ dt= 500; clearInterval(pid); pid=setInterval(aCycle,dt); });
-Text($p,'Slow',250,20).css({ stroke:'black',fill:'yellow'})
-  .on('click',()=>{ dt=2000; clearInterval(pid); pid=setInterval(aCycle,dt); });
-Text($p,'Stop',300,20).css({ stroke:'black',fill:'red'   })
-  .on('click',()=>{ clearInterval(pid); });
+$cntrl=$('#cntrls');
+const fast=Text($cntrl,'Fast',175,20).attr({ class:'speed' }).css({ stroke:'black',fill:'lime'  })
+  .on('click',()=>{ 
+    $('.speed').css({ 'font-weight':'normal' }); fast.css({ 'font-weight':'bold' });
+    dt= 500; clearInterval(pid); pid=setInterval(aCycle,dt); 
+  })
+;
+const slow=Text($cntrl,'Slow',225,20).attr({ class:'speed' }).css({ stroke:'black',fill:'yellow'})
+  .on('click',()=>{ 
+    $('.speed').css({ 'font-weight':'normal' }); slow.css({ 'font-weight':'bold' });
+    dt=2000; clearInterval(pid); pid=setInterval(aCycle,dt); 
+  })
+;
+const step=Text($cntrl,'Step',275,20).attr({ class:'speed' }).css({ stroke:'black',fill:'black'   })
+  .on('click',()=>{ 
+    $('.speed').css({ 'font-weight':'normal' }); step.css({ 'font-weight':'bold' });
+    clearInterval(pid); aCycle(); 
+  })
+;
+const stop=Text($cntrl,'Stop',325,20).attr({ class:'speed' }).css({ stroke:'black',fill:'red'   })
+  .on('click',()=>{ 
+    $('.speed').css({ 'font-weight':'normal' }); stop.css({ 'font-weight':'bold' });
+    clearInterval(pid); 
+  })
+;
+stop.css({ 'font-weight':'bold' }); // initial cndn
 
+Text($cntrl,'Send'  ,-40,50).attr({ class:'sendToken' }).css({ stroke:'black',fill:'black'  })
+  .on('click',()=>{ sendPort.command('requestSend');  });
+Text($cntrl,'Token' ,-40,65).attr({ class:'sendToken' }).css({ stroke:'black',fill:'black'  })
+  .on('click',()=>{ sendPort.command('requestSend');  });
+Text($cntrl,'Accept',550,50).attr({ class:'acceptToken' }).css({ stroke:'black',fill:'black'  })
+  .on('click',()=>{ recvPort.requestRecv(); });
+Text($cntrl,'Token' ,550,65).attr({ class:'acceptToken' }).css({ stroke:'black',fill:'black'  })
+  .on('click',()=>{ recvPort.requestRecv(); });
+
+// must define be before the 'g' layers 
+//const entanglementRegion=append($('svg'),$SVGnode('rect'))
+//  .attr({fill:'green',opacity:0.2,stroke:'red',x:45,y:30,width:530,height:730})
+//;
+  
+let $p=$('#objs');
 // create and hook up what is to the left and right 
 const snapPt=(i)=> [10+i*(scale+40),150-1.5*scale*Math.abs(i-4)]; // positioning logic
-let cells= ['CAL','DAL','NAL','LINK','NAL','DAL','CAL'].map((d,k)=> Cell(snapPt(k+1),k%2,d));
-let sendPort=SendPort(snapPt(0));
-let recvPort=RecvPort(snapPt(8));
+let cells= ['CAL','DAL','NAL','LINK','NAL','DAL','CAL'].map((d,k)=> Cell($p,snapPt(k+1),k%2,d));
+let sendPort=SendPort($p,snapPt(0));
+let recvPort=RecvPort($p,snapPt(8));
 cells.slice(1)   .map((cell,k)=>{ cell.L=cells[k]; });
 cells.slice(0,-1).map((cell,k)=>{ cell.R=cells[k+1]; });
 cells[0].Lbc=sendPort;
 cells[6].Rbc=recvPort;
 let objs=[sendPort].concat(cells).concat(recvPort);
-Text($p,'Send Token',110,15).css({ stroke:'black',fill:'black'  })
-  .on('click',()=>{ 
-    sendPort.command('requestSend'); 
-  });
-Text($p,'Transfer',120,35).css({ stroke:'black',fill:'black'  })
+
+
+Text($p,'Transfer',60,15).attr({id:'sendTransferButton'}).css({ stroke:'black',fill:'black',opacity:0.2  })
   .on('click',()=>{ 
     sendPort.command('ACK'); 
   });
-Text($p,'Accept Token',400,20).css({ stroke:'black',fill:'black'  })
-  .on('click',()=>{ recvPort.requestRecv(); });
+Text($p,'Transfer',440,15).attr({id:'recvTransferButton'}).css({ stroke:'black',fill:'black',opacity:0.2  })
+  .on('click',()=>{ 
+    recvPort.command('ACK'); 
+  });
+
+
 
 // ---- controls for picking which cells fsm we display ----
 const fsmButton=(d,k,wid,ht,__,x=10+snapPt(k)[0]-(wid/2))=>{
